@@ -6,45 +6,60 @@ import argparse
 import os
 
 parser = argparse.ArgumentParser(description="xml/text date time parser")
-parser.add_argument('--version', action='version', version='%(prog)s 0.1.2')
+parser.add_argument('--version', action='version', version='%(prog)s 0.1.3')
 parser.add_argument("-f", "--filename", required=True, help="filename, select the XML parse, when the extension is xml.")
 
 args = parser.parse_args()
 
+dt_last = None
 
-def show_result(invalid, index):
-    print("records with invalid datetime {} of a total of {}".format(invalid, index))
+records = 0
+invalid = 0
+out_sequence = 0
 
 
 def parse_xml(name):
+    global records, invalid
     try:
         tree = ET.parse(name)
         root = tree.getroot()
-        index = 0
-        invalid = 0
+
         for mark in root.findall('mark'):
             card_id = mark.find('access_id')
             date_time = mark.find('datetime')
 
-            index += 1
-            if not test_datetime(record=index, card_id=card_id.text,
+            records += 1
+            if not test_datetime(card_id=card_id.text,
                                  year=date_time.find('year').text, month=date_time.find('month').text,
                                  day=date_time.find('day').text, hour=date_time.find('hour').text,
                                  minute=date_time.find('minute').text, seconds=date_time.find('seconds').text):
                 invalid += 1
-
-        show_result(invalid, index)
     except FileNotFoundError:
         print("error file not found")
 
 
-def test_datetime(record, card_id, year, month, day, hour, minute, seconds):
+def test_datetime(card_id, year, month, day, hour, minute, seconds):
+    global dt_last, out_sequence, records
     try:
         dt = datetime(year=int(year), month=int(month),
                       day=int(day), hour=int(hour),
                       minute=int(minute), second=int(seconds))
+        if dt_last is None:
+            dt_last = dt
+        elif dt < dt_last:
+            out_sequence += 1
+            print("mark:{} id:{} year:{} month:{} day:{} hour:{} minute:{} seconds: {} out of sequence".format(records,
+                                                                                               card_id,
+                                                                                               year,
+                                                                                               month,
+                                                                                               day,
+                                                                                               hour,
+                                                                                               minute,
+                                                                                               seconds))
+        dt_last = dt
+
     except ValueError:
-        print("mark:{} id:{} year:{} month:{} day:{} hour:{} minute:{} seconds: {}".format(record,
+        print("mark:{} id:{} year:{} month:{} day:{} hour:{} minute:{} seconds: {}".format(records,
                                                                                            card_id,
                                                                                            year,
                                                                                            month,
@@ -57,25 +72,22 @@ def test_datetime(record, card_id, year, month, day, hour, minute, seconds):
 
 
 def parse_text(name):
+    global records, invalid
     try:
         with open(name) as f:
             lines = f.readlines()  # list containing lines of file
 
-            index = 0
-            invalid = 0
             for line in lines:
                 line = line.strip()  # remove leading/trailing white spaces
                 columns = [item.strip() for item in line.split(' ')]
                 dt = columns[1].split('/')
                 tm = columns[2].split(':')
 
-                index += 1
-                if not test_datetime(record=index, card_id=columns[0],
+                records += 1
+                if not test_datetime(card_id=columns[0],
                                      year=dt[2], month=dt[1], day=dt[0],
                                      hour=tm[0], minute=tm[1], seconds=tm[2]):
                     invalid += 1
-
-            show_result(invalid, index)
     except FileNotFoundError:
         print("error file not found")
 
@@ -90,3 +102,9 @@ if __name__ == '__main__':
         parse_text(args.filename)
     else:
         print("error, invalid file extension: {}".format(file_extension))
+        exit(0)
+
+    print("\nfrom {} records, {} have invalid datetime, and {} are out of sequence".format(records,
+                                                                                           invalid,
+                                                                                           out_sequence))
+
