@@ -86,10 +86,9 @@ def parse_text(name):
                 tm = columns[2].split(':')
 
                 records += 1
-                if not test_datetime(card_id=columns[0],
-                                     year=dt[2], month=dt[1], day=dt[0],
-                                     hour=tm[0], minute=tm[1], seconds=tm[2]):
-                    invalid += 1
+                test_datetime(card_id=columns[0],
+                              year=dt[2], month=dt[1], day=dt[0],
+                              hour=tm[0], minute=tm[1], seconds=tm[2])
     except FileNotFoundError:
         print("error file not found")
 
