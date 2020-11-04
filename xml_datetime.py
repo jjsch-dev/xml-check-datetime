@@ -10,7 +10,7 @@ import platform
 
 
 parser = argparse.ArgumentParser(description="xml/text date time parser")
-parser.add_argument('--version', action='version', version='%(prog)s 0.1.3')
+parser.add_argument('--version', action='version', version='%(prog)s 0.1.4')
 parser.add_argument("-f", "--filename", required=True, help="filename, select the XML parse, when the extension is xml.")
 
 args = parser.parse_args()
@@ -18,8 +18,8 @@ args = parser.parse_args()
 dt_last = None
 
 records = 0
-invalid = 0
-out_sequence = 0
+invalid = []
+out_sequence = []
 
 
 def parse_xml(name):
@@ -33,17 +33,16 @@ def parse_xml(name):
             date_time = mark.find('datetime')
 
             records += 1
-            if not test_datetime(card_id=card_id.text,
+            test_datetime(card_id=card_id.text,
                                  year=date_time.find('year').text, month=date_time.find('month').text,
                                  day=date_time.find('day').text, hour=date_time.find('hour').text,
-                                 minute=date_time.find('minute').text, seconds=date_time.find('seconds').text):
-                invalid += 1
+                                 minute=date_time.find('minute').text, seconds=date_time.find('seconds').text)
     except FileNotFoundError:
         print("error file not found")
 
 
 def test_datetime(card_id, year, month, day, hour, minute, seconds):
-    global dt_last, out_sequence, records
+    global dt_last, invalid, out_sequence, records
     try:
         dt = datetime(year=int(year), month=int(month),
                       day=int(day), hour=int(hour),
@@ -51,8 +50,7 @@ def test_datetime(card_id, year, month, day, hour, minute, seconds):
         if dt_last is None:
             dt_last = dt
         elif dt < dt_last:
-            out_sequence += 1
-            print("mark:{} id:{} year:{} month:{} day:{} hour:{} minute:{} seconds: {} out of sequence".format(records,
+            out_sequence.append("mark:{} id:{} year:{} month:{} day:{} hour:{} minute:{} seconds: {}".format(records,
                                                                                                card_id,
                                                                                                year,
                                                                                                month,
@@ -63,7 +61,7 @@ def test_datetime(card_id, year, month, day, hour, minute, seconds):
         dt_last = dt
 
     except ValueError:
-        print("mark:{} id:{} year:{} month:{} day:{} hour:{} minute:{} seconds: {}".format(records,
+        invalid.append("mark:{} id:{} year:{} month:{} day:{} hour:{} minute:{} seconds: {}".format(records,
                                                                                            card_id,
                                                                                            year,
                                                                                            month,
@@ -112,7 +110,17 @@ if __name__ == '__main__':
         print("error, invalid file extension: {}".format(file_extension))
         exit(0)
 
+    if len(invalid):
+        print("invalid datetime\n")
+        for item in invalid:
+            print(item)
+
+    if len(out_sequence):
+        print("\ndatetime out of sequence\n")
+        for item in out_sequence:
+            print(item)
+
     print("\nfrom {} records, {} have invalid datetime, and {} are out of sequence".format(records,
-                                                                                           invalid,
-                                                                                           out_sequence))
+                                                                                           len(invalid),
+                                                                                           len(out_sequence)))
 
