@@ -10,8 +10,13 @@ import platform
 
 
 parser = argparse.ArgumentParser(description="xml/text date time parser")
-parser.add_argument('--version', action='version', version='%(prog)s 0.1.4')
+parser.add_argument('--version', action='version', version='%(prog)s 0.1.5')
 parser.add_argument("-f", "--filename", required=True, help="filename, select the XML parse, when the extension is xml.")
+parser.add_argument('--card_id', dest='card_id', action='store_true')
+parser.add_argument('--no-card_id', dest='card_id', action='store_false')
+parser.add_argument('--event_code', dest='event_code', action='store_true')
+parser.add_argument('--no-event_code', dest='even_code', action='store_false')
+parser.set_defaults(feature=False, event_code=False)
 
 args = parser.parse_args()
 
@@ -19,7 +24,10 @@ dt_last = None
 
 records = 0
 invalid = []
-out_sequence = []
+datetime_out_sequence = []
+id_out_sequence = []
+invalid_event_code = []
+source_dict = {}
 
 
 def parse_xml(name):
@@ -31,18 +39,38 @@ def parse_xml(name):
         for mark in root.findall('mark'):
             card_id = mark.find('access_id')
             date_time = mark.find('datetime')
+            source = mark.find("source")
+            event_code = mark.find("event_code")
 
             records += 1
-            test_datetime(card_id=card_id.text,
-                                 year=date_time.find('year').text, month=date_time.find('month').text,
-                                 day=date_time.find('day').text, hour=date_time.find('hour').text,
-                                 minute=date_time.find('minute').text, seconds=date_time.find('seconds').text)
+            check_datetime(card_id=card_id.text,
+                           year=date_time.find('year').text, month=date_time.find('month').text,
+                           day=date_time.find('day').text, hour=date_time.find('hour').text,
+                           minute=date_time.find('minute').text, seconds=date_time.find('seconds').text)
+
+            if args.card_id:
+                check_card_id(card_id=card_id.text, source=source.text)
+
+            if args.event_code:
+                check_event_code(card_id=card_id.text, event_code=event_code.text)
+
     except FileNotFoundError:
         print("error file not found")
 
 
-def test_datetime(card_id, year, month, day, hour, minute, seconds):
-    global dt_last, invalid, out_sequence, records
+def check_datetime(card_id, year, month, day, hour, minute, seconds):
+    global dt_last, invalid, datetime_out_sequence, records
+
+    str_log = "mark:{} id:{} year:{} "\
+              "month:{} day:{} hour:{} "\
+              "minute:{} seconds: {}".format(records,
+                                             card_id,
+                                             year,
+                                             month,
+                                             day,
+                                             hour,
+                                             minute,
+                                             seconds)
     try:
         dt = datetime(year=int(year), month=int(month),
                       day=int(day), hour=int(hour),
@@ -50,27 +78,30 @@ def test_datetime(card_id, year, month, day, hour, minute, seconds):
         if dt_last is None:
             dt_last = dt
         elif dt < dt_last:
-            out_sequence.append("mark:{} id:{} year:{} month:{} day:{} hour:{} minute:{} seconds: {}".format(records,
-                                                                                               card_id,
-                                                                                               year,
-                                                                                               month,
-                                                                                               day,
-                                                                                               hour,
-                                                                                               minute,
-                                                                                               seconds))
+            datetime_out_sequence.append(str_log)
         dt_last = dt
-
     except ValueError:
-        invalid.append("mark:{} id:{} year:{} month:{} day:{} hour:{} minute:{} seconds: {}".format(records,
-                                                                                           card_id,
-                                                                                           year,
-                                                                                           month,
-                                                                                           day,
-                                                                                           hour,
-                                                                                           minute,
-                                                                                           seconds))
-        return False
-    return True
+        invalid.append(str_log)
+
+
+def check_card_id(card_id, source):
+    global source_dict, records
+    if source in source_dict:
+        last_id = source_dict[source]
+    else:
+        last_id = card_id
+
+    if int(card_id) < int(last_id):
+        id_out_sequence.append("mark: {} id: {} source :{}".format(records, card_id, source))
+        card_id = last_id
+
+    source_dict[source] = card_id
+
+
+def check_event_code(card_id, event_code):
+    global invalid_event_code
+    if event_code != "1":
+        invalid_event_code.append("mark: {} id: {} event_code :{}".format(records, card_id, event_code))
 
 
 def parse_text(name):
@@ -86,9 +117,9 @@ def parse_text(name):
                 tm = columns[2].split(':')
 
                 records += 1
-                test_datetime(card_id=columns[0],
-                              year=dt[2], month=dt[1], day=dt[0],
-                              hour=tm[0], minute=tm[1], seconds=tm[2])
+                check_datetime(card_id=columns[0],
+                               year=dt[2], month=dt[1], day=dt[0],
+                               hour=tm[0], minute=tm[1], seconds=tm[2])
     except FileNotFoundError:
         print("error file not found")
 
@@ -96,8 +127,8 @@ def parse_text(name):
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     print("\nos: {} - arch: {} - cpu: {}\n".format(platform.system(),
-                                           platform.architecture(),
-                                           platform.processor()))
+                                                   platform.architecture(),
+                                                   platform.processor()))
 
     file_name, file_extension = os.path.splitext(args.filename)
 
@@ -114,12 +145,27 @@ if __name__ == '__main__':
         for item in invalid:
             print(item)
 
-    if len(out_sequence):
+    if len(datetime_out_sequence):
         print("\ndatetime out of sequence\n")
-        for item in out_sequence:
+        for item in datetime_out_sequence:
             print(item)
 
-    print("\nfrom {} records, {} have invalid datetime, and {} are out of sequence".format(records,
-                                                                                           len(invalid),
-                                                                                           len(out_sequence)))
+    if len(id_out_sequence):
+        print("\nid out of sequence\n")
+        for item in id_out_sequence:
+            print(item)
+
+    if len(invalid_event_code):
+        print("\ninvalid event code\n")
+        for item in invalid_event_code:
+            print(item)
+
+    print("\nfrom {} records, {} have invalid datetime, "
+          "{} dates are out of sequence, "
+          "{} id out of sequence and "
+          "{} invalid even code".format(records,
+                                        len(invalid),
+                                        len(datetime_out_sequence),
+                                        len(id_out_sequence),
+                                        len(invalid_event_code)))
 
