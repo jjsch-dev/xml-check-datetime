@@ -2,7 +2,10 @@
 NOTE: for generate win32 use: WINEARCH=win32 WINEPREFIX=~/win32 wine pyinstaller.exe --onefile xml_datetime.py
       for run win32: WINEARCH=win32 WINEPREFIX=~/win32 sudo wine ./xml_datetime.exe
 """
-import xml.etree.ElementTree as ET
+try:
+    import xml.etree.cElementTree as ET
+except ImportError:
+    import xml.etree.ElementTree as ET
 from datetime import datetime
 import argparse
 import os
@@ -10,7 +13,7 @@ import platform
 
 
 parser = argparse.ArgumentParser(description="xml/text date time parser")
-parser.add_argument('--version', action='version', version='%(prog)s 0.1.5')
+parser.add_argument('--version', action='version', version='%(prog)s 0.1.6')
 parser.add_argument("-f", "--filename", required=True, help="filename, select the XML parse, when the extension is xml.")
 parser.add_argument('--card_id', dest='card_id', action='store_true')
 parser.add_argument('--no-card_id', dest='card_id', action='store_false')
@@ -88,12 +91,9 @@ def check_card_id(card_id, source):
     global source_dict, records
     if source in source_dict:
         last_id = source_dict[source]
-    else:
-        last_id = card_id
 
-    if int(card_id) < int(last_id):
-        id_out_sequence.append("mark: {} id: {} source :{}".format(records, card_id, source))
-        card_id = last_id
+        if int(card_id) != int(last_id) + 1:
+            id_out_sequence.append("mark: {} id: {} source :{}".format(records, card_id, source))
 
     source_dict[source] = card_id
 
@@ -163,7 +163,7 @@ if __name__ == '__main__':
     print("\nfrom {} records, {} have invalid datetime, "
           "{} dates are out of sequence, "
           "{} id out of sequence and "
-          "{} invalid even code".format(records,
+          "{} invalid event code".format(records,
                                         len(invalid),
                                         len(datetime_out_sequence),
                                         len(id_out_sequence),
