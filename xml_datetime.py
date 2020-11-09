@@ -13,18 +13,16 @@ import platform
 
 
 parser = argparse.ArgumentParser(description="xml/text date time parser")
-parser.add_argument('--version', action='version', version='%(prog)s 0.1.6')
+parser.add_argument('--version', action='version', version='%(prog)s 0.1.7')
 parser.add_argument("-f", "--filename", required=True, help="filename, select the XML parse, when the extension is xml.")
-parser.add_argument('--card_id', dest='card_id', action='store_true')
-parser.add_argument('--no-card_id', dest='card_id', action='store_false')
-parser.add_argument('--event_code', dest='event_code', action='store_true')
-parser.add_argument('--no-event_code', dest='even_code', action='store_false')
-parser.set_defaults(feature=False, event_code=False)
+parser.add_argument('--card_id', dest='card_id', action='store_true', help="looks for identifiers out of sequence.")
+parser.add_argument('--event_code', dest='event_code', action='store_true', help="verify that the event code is accepted.")
+parser.add_argument("--gen_cvs", dest='gen_cvs', action='store_true', help="generates an output file in csv format with the history records.")
+parser.set_defaults(car_id=False, event_code=False, gen_cvs=False)
 
 args = parser.parse_args()
 
 dt_last = None
-
 records = 0
 invalid = []
 datetime_out_sequence = []
@@ -33,37 +31,56 @@ invalid_event_code = []
 source_dict = {}
 
 
-def parse_xml(name):
+def parse_xml(file_name, file_extension):
     global records, invalid
     try:
-        tree = ET.parse(name)
+        tree = ET.parse(file_name + file_extension)
         root = tree.getroot()
 
+        if args.gen_cvs:
+            cvs_fd = cvs_open(file_name)
+            if cvs_fd is None:
+                print("error, the cvs output file could not be created.")
+                exit(0)
+
         for mark in root.findall('mark'):
-            card_id = mark.find('access_id')
+            card_id = int(mark.find('access_id').text)
             date_time = mark.find('datetime')
-            source = mark.find("source")
-            event_code = mark.find("event_code")
+            source = int(mark.find("source").text)
+            event_code = int(mark.find("event_code").text)
+
+            year = int(date_time.find('year').text)
+            month = int(date_time.find('month').text)
+            day = int(date_time.find('day').text)
+            hour = int(date_time.find('hour').text)
+            minute = int(date_time.find('minute').text)
+            seconds = int(date_time.find('seconds').text)
 
             records += 1
-            check_datetime(card_id=card_id.text,
-                           year=date_time.find('year').text, month=date_time.find('month').text,
-                           day=date_time.find('day').text, hour=date_time.find('hour').text,
-                           minute=date_time.find('minute').text, seconds=date_time.find('seconds').text)
+            error = check_datetime(card_id=card_id, year=year, month=month,
+                                   day=day, hour=hour, minute=minute, seconds=seconds)
 
             if args.card_id:
-                check_card_id(card_id=card_id.text, source=source.text)
+                error += check_card_id(card_id=card_id, source=source)
 
             if args.event_code:
-                check_event_code(card_id=card_id.text, event_code=event_code.text)
+                error += check_event_code(card_id=card_id, event_code=event_code)
 
+            if args.gen_cvs:
+                cvs_append(fd=cvs_fd, card_id=card_id, year=year, month=month,
+                           day=day, hour=hour, minute=minute, seconds=seconds,
+                           source=source, event_code=event_code, error=error)
+
+        if args.gen_cvs:
+            cvs_close(fd=cvs_fd)
     except FileNotFoundError:
-        print("error file not found")
+        print("error, file not found")
 
 
 def check_datetime(card_id, year, month, day, hour, minute, seconds):
     global dt_last, invalid, datetime_out_sequence, records
 
+    error = ""
     str_log = "mark:{} id:{} year:{} "\
               "month:{} day:{} hour:{} "\
               "minute:{} seconds: {}".format(records,
@@ -82,26 +99,35 @@ def check_datetime(card_id, year, month, day, hour, minute, seconds):
             dt_last = dt
         elif dt < dt_last:
             datetime_out_sequence.append(str_log)
+            error = "date_sequence"
         dt_last = dt
     except ValueError:
         invalid.append(str_log)
+        error = "dt_invalid"
+
+    return error
 
 
 def check_card_id(card_id, source):
     global source_dict, records
+    error = ''
     if source in source_dict:
         last_id = source_dict[source]
 
         if int(card_id) != int(last_id) + 1:
             id_out_sequence.append("mark: {} id: {} source :{}".format(records, card_id, source))
+            error = ' id_sequence'
 
     source_dict[source] = card_id
+    return error
 
 
 def check_event_code(card_id, event_code):
     global invalid_event_code
-    if event_code != "1":
+    if event_code != 1:
         invalid_event_code.append("mark: {} id: {} event_code :{}".format(records, card_id, event_code))
+        return ' event_code'
+    return ''
 
 
 def parse_text(name):
@@ -124,7 +150,30 @@ def parse_text(name):
         print("error file not found")
 
 
-# Press the green button in the gutter to run the script.
+def cvs_open(file_name):
+    try:
+        return open(file_name + ".cvs", 'w')
+    except FileNotFoundError:
+        return None
+    except PermissionError:
+        return None
+
+
+def cvs_append(fd, card_id, year, month, day, hour, minute, seconds, source, event_code, error):
+    if len(error) == 0:
+        error = "ok"
+
+    fd.write("{:010} {:02}/{:02}/{:02} "
+             "{:02}:{:02}:{:02} "
+             "{:02} {:03} {}\n".format(card_id, year, month, day,
+                                       hour, minute, seconds,
+                                       source, event_code, error.lstrip(' ')))
+
+
+def cvs_close(fd):
+    fd.close
+
+
 if __name__ == '__main__':
     print("\nos: {} - arch: {} - cpu: {}\n".format(platform.system(),
                                                    platform.architecture(),
@@ -133,7 +182,7 @@ if __name__ == '__main__':
     file_name, file_extension = os.path.splitext(args.filename)
 
     if file_extension == ".xml":
-        parse_xml(args.filename)
+        parse_xml(file_name, file_extension)
     elif file_extension == ".txt":
         parse_text(args.filename)
     else:
