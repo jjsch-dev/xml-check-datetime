@@ -10,15 +10,15 @@ from datetime import datetime
 import argparse
 import os
 import platform
-
+import json
 
 parser = argparse.ArgumentParser(description="xml/text date time parser")
-parser.add_argument('--version', action='version', version='%(prog)s 0.1.7')
-parser.add_argument("-f", "--filename", required=True, help="filename, select the XML parse, when the extension is xml.")
+parser.add_argument('--version', action='version', version='%(prog)s 0.1.8')
+parser.add_argument("-f", "--filename", required=True, help="filename, select the XML parser, when the extension is xml.")
 parser.add_argument('--card_id', dest='card_id', action='store_true', help="looks for identifiers out of sequence.")
 parser.add_argument('--event_code', dest='event_code', action='store_true', help="verify that the event code is accepted.")
-parser.add_argument("--gen_cvs", dest='gen_cvs', action='store_true', help="generates an output file in csv format with the history records.")
-parser.set_defaults(car_id=False, event_code=False, gen_cvs=False)
+parser.add_argument("--gen_csv", dest='gen_csv', action='store_true', help="build a csv file, with the records plus an error field.")
+parser.set_defaults(car_id=False, event_code=False, gen_csv=False)
 
 args = parser.parse_args()
 
@@ -29,18 +29,25 @@ datetime_out_sequence = []
 id_out_sequence = []
 invalid_event_code = []
 source_dict = {}
-
+error_fmt_numeric = False
 
 def parse_xml(file_name, file_extension):
-    global records, invalid
+    global records, invalid, error_fmt_numeric
     try:
         tree = ET.parse(file_name + file_extension)
         root = tree.getroot()
 
-        if args.gen_cvs:
-            cvs_fd = cvs_open(file_name)
-            if cvs_fd is None:
-                print("error, the cvs output file could not be created.")
+        if args.gen_csv:
+            with open("csv_format.js") as stream:
+                line = stream.read()
+            csv_format = json.loads(line)
+
+            if "error" in csv_format["fields"]:
+                error_fmt_numeric = False if csv_format["fields"]["error"] == "string" else True
+
+            csv_fd = csv_open(file_name)
+            if csv_fd is None:
+                print("error, the csv output file could not be created.")
                 exit(0)
 
         for mark in root.findall('mark'):
@@ -66,19 +73,20 @@ def parse_xml(file_name, file_extension):
             if args.event_code:
                 error += check_event_code(card_id=card_id, event_code=event_code)
 
-            if args.gen_cvs:
-                cvs_append(fd=cvs_fd, card_id=card_id, year=year, month=month,
+            if args.gen_csv:
+                csv_append(fd=csv_fd, card_id=card_id, year=year, month=month,
                            day=day, hour=hour, minute=minute, seconds=seconds,
-                           source=source, event_code=event_code, error=error)
+                           source=source, event_code=event_code, error=error,
+                           layout=csv_format)
 
-        if args.gen_cvs:
-            cvs_close(fd=cvs_fd)
+        if args.gen_csv:
+            csv_close(fd=csv_fd)
     except FileNotFoundError:
         print("error, file not found")
 
 
 def check_datetime(card_id, year, month, day, hour, minute, seconds):
-    global dt_last, invalid, datetime_out_sequence, records
+    global dt_last, invalid, datetime_out_sequence, records, error_fmt_numeric
 
     error = ""
     str_log = "mark:{} id:{} year:{} "\
@@ -99,34 +107,34 @@ def check_datetime(card_id, year, month, day, hour, minute, seconds):
             dt_last = dt
         elif dt < dt_last:
             datetime_out_sequence.append(str_log)
-            error = "date_sequence"
+            error = '2' if error_fmt_numeric else "date_sequence"
         dt_last = dt
     except ValueError:
         invalid.append(str_log)
-        error = "dt_invalid"
+        error = '3' if error_fmt_numeric else "dt_invalid"
 
     return error
 
 
 def check_card_id(card_id, source):
-    global source_dict, records
+    global source_dict, records, error_fmt_numeric
     error = ''
     if source in source_dict:
         last_id = source_dict[source]
 
         if int(card_id) != int(last_id) + 1:
             id_out_sequence.append("mark: {} id: {} source :{}".format(records, card_id, source))
-            error = ' id_sequence'
+            error = ' 4' if error_fmt_numeric else ' id_sequence'
 
     source_dict[source] = card_id
     return error
 
 
 def check_event_code(card_id, event_code):
-    global invalid_event_code
+    global invalid_event_code, error_fmt_numeric
     if event_code != 1:
         invalid_event_code.append("mark: {} id: {} event_code :{}".format(records, card_id, event_code))
-        return ' event_code'
+        return  ' 5' if error_fmt_numeric else ' event_code'
     return ''
 
 
@@ -150,27 +158,62 @@ def parse_text(name):
         print("error file not found")
 
 
-def cvs_open(file_name):
+def csv_open(file_name):
     try:
-        return open(file_name + ".cvs", 'w')
+        return open(file_name + ".csv", 'w')
     except FileNotFoundError:
         return None
     except PermissionError:
         return None
 
 
-def cvs_append(fd, card_id, year, month, day, hour, minute, seconds, source, event_code, error):
+def csv_append(fd, card_id, year, month, day, hour, minute, seconds, source, event_code, error, layout):
+    global error_fmt_numeric
     if len(error) == 0:
-        error = "ok"
+        error = "1" if error_fmt_numeric else "ok"
 
-    fd.write("{:010} {:02}/{:02}/{:02} "
-             "{:02}:{:02}:{:02} "
-             "{:02} {:03} {}\n".format(card_id, year, month, day,
-                                       hour, minute, seconds,
-                                       source, event_code, error.lstrip(' ')))
+    fields = layout["fields"]
+    for item in fields:
+        if item == 'index':
+            fd.write(fields[item].format(records))
+        elif item == "card_id":
+            fd.write(fields[item].format(card_id))
+        elif item == "source":
+            fd.write(fields[item].format(source))
+        elif item == "event_code":
+            fd.write(fields[item].format(event_code))
+        elif item == "error":
+            fd.write(error.lstrip(' '))
+        elif item == "date":
+            date = fields[item]
+            for x in date:
+                if x == "month":
+                    fd.write(date[x].format(month))
+                elif x == "year":
+                    fd.write(date[x].format(year))
+                elif x == "day":
+                    fd.write(date[x].format(day))
+
+                if x != list(date)[-1] and x != "sep":
+                    fd.write(date["sep"])
+        elif item == "time":
+            date = fields[item]
+            for x in date:
+                if x == "hour":
+                    fd.write(date[x].format(hour))
+                elif x == "minute":
+                    fd.write(date[x].format(minute))
+                elif x == "seconds":
+                    fd.write(date[x].format(seconds))
+
+                if x != list(date)[-1] and x != "sep":
+                    fd.write(date["sep"])
+        if item != list(fields)[-1]:
+            fd.write(layout["sep"])
+    fd.write("\n")
 
 
-def cvs_close(fd):
+def csv_close(fd):
     fd.close
 
 
