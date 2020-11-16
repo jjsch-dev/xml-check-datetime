@@ -2,15 +2,15 @@ XML Date time Utility
 ====
 
 
-xml_datetime.py is an open source command line utility in Python to verify the consistency of the IN-2 and API-400x equipment history files obtained with the itk_tool application.
+xml_datetime.py is Python open source command line utility to verify the consistency of history files obtained with the itk_tool application from IN-2 and API-400x devices.
 
-It mainly checks the validity of the date and time and that the sequence is ascending.
+It mainly checks the validity of the date and time and that the sequence is ascending, `-f`  `xml file`.
 
-If the identifiers were generated in the history, (for example incremental by one), it is possible to detect if there are any out of sequence.
+If the identifiers were generated in the history, (for example incremental by one), it is possible to detect if there are any out of sequence, `--card_id`.
 
-If the identifiers were registered and all the actions in the history were activated, it is possible to detect unaccepted markings.
+If the identifiers were registered and all the actions in the history were activated, it is possible to detect unaccepted markings, `--event_code`.
 
-In addition to the report in the console, it is possible to generate a file in CSV format, (Comma-separated values) with the command --gen_csv, and in turn it is possible to choose the format of the output file with the configuration file csv_format.js
+In addition to the report in the console, it is possible to generate a file in CSV format, (Comma-separated values) with `--gen_csv`, and in turn it is possible to choose the format of the output file with csv_format.js
 
 The file has the following structure:
 ```json
@@ -41,13 +41,13 @@ Notes on formatting the output file
 1) The order of the field is what it has in the json file.
 2) For a field not to be present, it is simply removed from the format file.
 3) The number of digits follows the python string format, for example for fixed fields with leading zeros {: 08}, where 8 indicates the size of the field and that it is completed with zeros.
-4) The error field has two options, when you use the string tag, the output is: ok, dt_invalid, dt_sequence, id_sequence. And when it is numeric the output is: 1, 2, 3, 4 respectively.
+4) The error field has two options, when you use the `string` tag, the output is: ok, dt_invalid, dt_sequence, id_sequence. And when it is `numeric` the output is: 1, 2, 3, 4 respectively.
 
 
 Installation
 ------------
 For Windows, there are two executables in the dist folder, one for x86 and one for amd64.
-Note: to generate the output file, it is necessary to copy the csv_format.js file in the same folder as the executable.
+Note: to generate the output file, it is necessary to copy the `csv_format.js` file in the same folder as the executable.
 
 Support
 -------
