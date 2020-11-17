@@ -53,6 +53,8 @@ Use example
 -----------
 The following video explains the use of the script, from the installation to the generation of the output file in CSV format.
 
+Please click on the image below to play the video.
+
 [![](http://img.youtube.com/vi/m4iIyVHxlkk/0.jpg)](http://www.youtube.com/watch?v=m4iIyVHxlkk "xml date time parser")
 
 Support
