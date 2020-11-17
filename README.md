@@ -55,7 +55,7 @@ The following video explains the use of the script, from the installation to the
 
 Please click on the image below to play the video.
 
-[![](http://img.youtube.com/vi/m4iIyVHxlkk/0.jpg)](http://www.youtube.com/watch?v=m4iIyVHxlkk "xml date time parser")
+[![](http://img.youtube.com/vi/iT9TkP93-aU/0.jpg)](http://www.youtube.com/watch?v=iT9TkP93-aU "xml date time parser")
 
 Support
 -------
